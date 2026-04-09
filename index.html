@@ -11,7 +11,7 @@
             background: #f5f7fa;
             min-height: 100vh;
         }
-
+        
         /* 顶部标题栏 */
         .header {
             background: #1890ff;
@@ -37,7 +37,7 @@
             border-radius: 4px;
             font-size: 12px;
         }
-
+        
         /* 大盘指数 */
         .market-section {
             background: white;
@@ -92,7 +92,7 @@
             margin-top: 4px;
         }
         .market-card.down .market-change { color: #ff4d4f; }
-
+        
         /* 控制栏 */
         .control-section {
             background: white;
@@ -142,7 +142,7 @@
             color: white;
         }
         .btn-danger:hover { background: #ff7875; }
-
+        
         .auto-refresh-row {
             display: flex;
             align-items: center;
@@ -172,7 +172,7 @@
             transition: left 0.3s;
         }
         .switch.active::after { left: 24px; }
-
+        
         /* 汇总统计 */
         .summary-section {
             background: white;
@@ -199,7 +199,7 @@
         }
         .summary-value.up { color: #ff4d4f; }
         .summary-value.down { color: #52c41a; }
-
+        
         /* 基金表格 */
         .fund-section {
             background: white;
@@ -225,7 +225,7 @@
             font-size: 14px;
         }
         .calc-link:hover { text-decoration: underline; }
-
+        
         table {
             width: 100%;
             border-collapse: collapse;
@@ -246,7 +246,7 @@
             border-bottom: 1px solid #f0f0f0;
         }
         tr:hover { background: #fafafa; }
-
+        
         .fund-code { 
             color: #1890ff; 
             font-family: monospace;
@@ -265,13 +265,13 @@
         }
         .up { color: #ff4d4f; }
         .down { color: #52c41a; }
-
+        
         .btn-small {
             padding: 4px 8px;
             font-size: 12px;
             margin-right: 4px;
         }
-
+        
         .editable {
             background: #fff7e6;
             border: 1px solid #ffd666;
@@ -280,23 +280,23 @@
             width: 80px;
             font-size: 13px;
         }
-
+        
         /* 手机适配 */
         @media (max-width: 768px) {
             .market-grid { grid-template-columns: repeat(2, 1fr); }
             .summary-section { grid-template-columns: repeat(2, 1fr); }
-
+            
             /* 表格横向滚动 */
             .table-wrapper { overflow-x: auto; }
             table { min-width: 800px; }
-
+            
             .add-fund-row { flex-direction: column; }
             .add-fund-row input { width: 100%; }
-
+            
             .header h1 { font-size: 16px; }
             .header-right { font-size: 12px; }
         }
-
+        
         /* 详情弹窗 */
         .modal {
             display: none;
@@ -355,7 +355,7 @@
             margin-top: 20px;
         }
         .form-actions .btn { flex: 1; }
-
+        
         .empty-state {
             text-align: center;
             padding: 40px;
@@ -366,7 +366,7 @@
             padding: 20px;
             color: #999;
         }
-
+        
         .error-tip {
             background: #fff1f0;
             border: 1px solid #ffa39e;
@@ -386,12 +386,12 @@
             <span class="update-badge" id="updateStatus">更新中...</span>
         </div>
     </div>
-
+    
     <!-- 错误提示 -->
     <div class="error-tip" id="errorTip" style="display: none;">
         ⚠️ 数据获取失败，请检查网络连接或稍后重试。
     </div>
-
+    
     <!-- 大盘指数 -->
     <div class="market-section">
         <div class="market-header">
@@ -403,7 +403,7 @@
             <div class="loading-text">加载中...</div>
         </div>
     </div>
-
+    
     <!-- 控制栏 -->
     <div class="control-section">
         <div class="add-fund-row">
@@ -414,14 +414,14 @@
         </div>
         <div class="auto-refresh-row">
             <div class="switch active" id="autoRefreshSwitch" onclick="toggleAutoRefresh()"></div>
-            <span>自动刷新（基金5分钟 / 指数1分钟）</span>
+            <span>自动刷新（基金60秒 / 指数15秒）</span>
             <div style="margin-left: auto;">
-                <button class="btn btn-default" id="refreshBtn">🔄 刷新</button>
+                <button class="btn btn-default" onclick="refreshData()">🔄 刷新</button>
                 <button class="btn btn-danger" onclick="clearAllFunds()">清空</button>
             </div>
         </div>
     </div>
-
+    
     <!-- 盈亏汇总 -->
     <div class="summary-section" id="summarySection">
         <div class="summary-item">
@@ -441,7 +441,7 @@
             <div class="summary-value" id="totalProfit">--</div>
         </div>
     </div>
-
+    
     <!-- 基金列表 -->
     <div class="fund-section">
         <div class="section-header">
@@ -473,7 +473,7 @@
             </table>
         </div>
     </div>
-
+    
     <!-- 编辑弹窗 -->
     <div class="modal" id="editModal">
         <div class="modal-content">
@@ -507,29 +507,15 @@
     <script>
         // 数据存储
         let funds = JSON.parse(localStorage.getItem('myFunds') || '[]');
+        let marketData = {};
         let autoRefresh = true;
         let fundRefreshInterval, marketRefreshInterval;
         let currentSort = { field: null, asc: true };
         let editingCode = null;
-
-        // 缓存配置（5分钟）
-        const cache = {
-            fundData: {},
-            marketData: { data: null, expireTime: 0 },
-            cacheTime: 5 * 60 * 1000
-        };
-
-        // 节流函数（防重复点击）
-        function throttle(fn, delay = 10000) {
-            let timer = null;
-            return function(...args) {
-                if (!timer) {
-                    fn.apply(this, args);
-                    timer = setTimeout(() => timer = null, delay);
-                }
-            };
-        }
-
+        
+        // Cloudflare Worker 地址（你的Worker）
+        const WORKER_URL = 'https://fund-proxy.375210336.workers.dev';
+        
         // 大盘指数代码
         const marketIndices = [
             { code: '1.000001', name: '上证指数' },
@@ -538,7 +524,7 @@
             { code: '1.000688', name: '科创50' },
             { code: '0.899050', name: '北证50' }
         ];
-
+        
         // 初始化
         function init() {
             updateTime();
@@ -547,29 +533,27 @@
             renderFunds();
             refreshData();
             startAutoRefresh();
-            
-            document.getElementById('refreshBtn').onclick = throttle(refreshData);
         }
-
+        
         // 更新时间
         function updateTime() {
             const now = new Date();
             document.getElementById('currentTime').textContent = now.toLocaleTimeString('zh-CN');
             document.getElementById('marketTime').textContent = now.toLocaleString('zh-CN');
         }
-
+        
         // 检查交易状态
         function checkMarketStatus() {
             const now = new Date();
             const hour = now.getHours();
             const minute = now.getMinutes();
             const isWeekday = now.getDay() >= 1 && now.getDay() <= 5;
-
+            
             const isTradeTime = isWeekday && (
                 (hour === 9 && minute >= 30) || (hour === 10) || (hour === 11 && minute <= 30) ||
                 (hour === 13) || (hour === 14) || (hour === 15 && minute === 0)
             );
-
+            
             const statusEl = document.getElementById('marketStatus');
             if (isTradeTime) {
                 statusEl.textContent = '开盘中';
@@ -579,37 +563,26 @@
                 statusEl.classList.remove('open');
             }
         }
-
-        // 获取大盘指数（通过公共代理）
+        
+        // 获取大盘指数
         async function fetchMarketData() {
             try {
-                const timestamp = Date.now();
-                if (timestamp < cache.marketData.expireTime && cache.marketData.data) {
-                    renderMarketData(cache.marketData.data);
-                    return;
-                }
-
                 const codes = marketIndices.map(i => i.code).join(',');
-                // 使用公共代理接口
-                const url = `https://api.allorigins.win/raw?url=https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f4,f12,f14&secids=${codes}&_=${timestamp}`;
+                const timestamp = Date.now();
+                const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f4,f12,f14&secids=${codes}&_=${timestamp}`;
                 
                 const response = await fetch(url);
                 const data = await response.json();
-
+                
                 if (data && data.data && data.data.diff) {
-                    cache.marketData = {
-                        data: data.data.diff,
-                        expireTime: timestamp + cache.cacheTime
-                    };
                     renderMarketData(data.data.diff);
                     document.getElementById('errorTip').style.display = 'none';
                 }
             } catch (e) {
                 console.error('获取大盘数据失败:', e);
-                if (cache.marketData.data) renderMarketData(cache.marketData.data);
             }
         }
-
+        
         // 渲染大盘数据
         function renderMarketData(data) {
             const grid = document.getElementById('marketGrid');
@@ -619,7 +592,7 @@
                 const changeValue = item.f4 ? (item.f4 / 100).toFixed(2) : '0.00';
                 const isUp = parseFloat(change) >= 0;
                 const name = marketIndices.find(i => i.code === item.f12)?.name || item.f14;
-
+                
                 return `
                     <div class="market-card ${isUp ? '' : 'down'}">
                         <div class="market-name">${name}</div>
@@ -629,64 +602,68 @@
                 `;
             }).join('');
         }
-
-     // 获取基金数据（使用公共代理）
-async function fetchFundData() {
-    if (funds.length === 0) return;
-    
-    document.getElementById('updateStatus').textContent = '更新中...';
-    document.getElementById('updateStatus').style.background = '#faad14';
-    
-    try {
-        const timestamp = Date.now();
-        const promises = funds.map(fund => {
-            // 使用公共代理
-            const fundUrl = `https://fundgz.1234567.com.cn/js/${fund.code}.js?rt=${timestamp}`;
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fundUrl)}`;
+        
+        // 获取基金数据（使用 Cloudflare Worker）
+        async function fetchFundData() {
+            if (funds.length === 0) return;
             
-            return fetch(proxyUrl)
-                .then(r => r.text())
-                .then(text => {
-                    // 解析 JSONP 格式：jsonpgz({...})
-                    const match = text.match(/jsonpgz\((.*)\);/);
-                    if (match) {
-                        return { code: fund.code, data: JSON.parse(match[1]) };
-                    }
-                    throw new Error('Invalid response');
-                })
-                .catch(() => ({ code: fund.code, data: null }));
-        });
-        
-        const results = await Promise.all(promises);
-        const validResults = results.filter(r => r.data && r.data.fundcode);
-        
-        if (validResults.length > 0) {
-            updateFundData(validResults);
-            document.getElementById('updateStatus').textContent = '已更新';
-            document.getElementById('updateStatus').style.background = '#52c41a';
-            document.getElementById('errorTip').style.display = 'none';
-            setTimeout(() => {
-                document.getElementById('updateStatus').textContent = '更新中...';
-                document.getElementById('updateStatus').style.background = '#faad14';
-            }, 2000);
-        } else {
-            throw new Error('无有效数据');
+            document.getElementById('updateStatus').textContent = '更新中...';
+            document.getElementById('updateStatus').style.background = '#faad14';
+            
+            try {
+                const timestamp = Date.now();
+                const promises = funds.map(fund => {
+                    // 使用 Cloudflare Worker
+                    const url = `${WORKER_URL}?code=${fund.code}&_=${timestamp}`;
+                    
+                    return fetch(url)
+                        .then(r => {
+                            if (!r.ok) throw new Error('Network response was not ok');
+                            return r.text();
+                        })
+                        .then(text => {
+                            // 解析 JSONP 格式：jsonpgz({...})
+                            const match = text.match(/jsonpgz\((.*)\);/);
+                            if (match) {
+                                return { code: fund.code, data: JSON.parse(match[1]) };
+                            }
+                            throw new Error('Invalid response format');
+                        })
+                        .catch(err => {
+                            console.error(`获取基金 ${fund.code} 失败:`, err);
+                            return { code: fund.code, data: null };
+                        });
+                });
+                
+                const results = await Promise.all(promises);
+                const validResults = results.filter(r => r.data && r.data.fundcode);
+                
+                if (validResults.length > 0) {
+                    updateFundData(validResults);
+                    document.getElementById('updateStatus').textContent = '已更新';
+                    document.getElementById('updateStatus').style.background = '#52c41a';
+                    document.getElementById('errorTip').style.display = 'none';
+                    setTimeout(() => {
+                        document.getElementById('updateStatus').textContent = '更新中...';
+                        document.getElementById('updateStatus').style.background = '#faad14';
+                    }, 2000);
+                } else {
+                    throw new Error('无有效数据');
+                }
+            } catch (e) {
+                console.error('获取基金数据失败:', e);
+                document.getElementById('updateStatus').textContent = '更新失败';
+                document.getElementById('updateStatus').style.background = '#ff4d4f';
+                document.getElementById('errorTip').style.display = 'block';
+            }
         }
-    } catch (e) {
-        console.error('获取基金数据失败:', e);
-        document.getElementById('updateStatus').textContent = '更新失败';
-        document.getElementById('updateStatus').style.background = '#ff4d4f';
-        document.getElementById('errorTip').style.display = 'block';
-        document.getElementById('errorTip').innerHTML = '⚠️ 公共代理可能已限流，建议稍后重试或使用其他部署方案。';
-    }
-}
-
+        
         // 更新基金数据
         function updateFundData(results) {
             let totalMarketValue = 0;
             let totalDayProfit = 0;
             let totalProfit = 0;
-
+            
             funds = funds.map(fund => {
                 const result = results.find(r => r.code === fund.code);
                 if (result && result.data) {
@@ -695,18 +672,18 @@ async function fetchFundData() {
                     const gszzl = parseFloat(data.gszzl) || 0;
                     const dwjz = parseFloat(data.dwjz) || 0;
                     const gztime = data.gztime || '--';
-
+                    
                     const shares = parseFloat(fund.shares) || 0;
                     const cost = parseFloat(fund.cost) || 0;
-
+                    
                     const marketValue = shares ? gsz * shares : 0;
                     const dayProfit = shares ? (gszzl / 100) * shares * dwjz : 0;
                     const totalProfitFund = shares ? (gsz - cost) * shares : 0;
-
+                    
                     totalMarketValue += marketValue;
                     totalDayProfit += dayProfit;
                     totalProfit += totalProfitFund;
-
+                    
                     return {
                         ...fund,
                         name: data.name,
@@ -721,27 +698,29 @@ async function fetchFundData() {
                 }
                 return fund;
             });
-
+            
+            // 更新汇总
             document.getElementById('totalCount').textContent = funds.length;
             document.getElementById('totalMarketValue').textContent = formatMoney(totalMarketValue);
             document.getElementById('totalDayProfit').textContent = formatMoney(totalDayProfit, true);
             document.getElementById('totalDayProfit').className = 'summary-value ' + (totalDayProfit >= 0 ? 'up' : 'down');
             document.getElementById('totalProfit').textContent = formatMoney(totalProfit, true);
             document.getElementById('totalProfit').className = 'summary-value ' + (totalProfit >= 0 ? 'up' : 'down');
-
+            
             saveFunds();
             renderFunds();
         }
-
+        
         // 渲染基金列表
         function renderFunds() {
             const tbody = document.getElementById('fundTableBody');
-
+            
             if (funds.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无基金，请添加</td></tr>';
                 return;
             }
-
+            
+            // 排序
             let displayFunds = [...funds];
             if (currentSort.field) {
                 displayFunds.sort((a, b) => {
@@ -750,9 +729,10 @@ async function fetchFundData() {
                     return currentSort.asc ? aVal - bVal : bVal - aVal;
                 });
             }
-
+            
             tbody.innerHTML = displayFunds.map(fund => {
                 const isUp = (fund.gszzl || 0) >= 0;
+                
                 return `
                     <tr>
                         <td class="fund-code">${fund.code}</td>
@@ -779,40 +759,41 @@ async function fetchFundData() {
                 `;
             }).join('');
         }
-
+        
         // 格式化金额
         function formatMoney(num, showSign = false) {
             if (num === undefined || num === null || num === 0) return '--';
             const sign = num > 0 ? '+' : '';
             return (showSign ? sign : '') + num.toFixed(2);
         }
-
+        
         // 添加基金
         function addFund() {
             const code = document.getElementById('fundCode').value.trim();
             const shares = parseFloat(document.getElementById('fundShares').value) || 0;
             const cost = parseFloat(document.getElementById('fundCost').value) || 0;
-
+            
             if (!code || code.length !== 6) {
                 alert('请输入6位基金代码');
                 return;
             }
-
+            
             if (funds.find(f => f.code === code)) {
                 alert('该基金已存在');
                 return;
             }
-
+            
             funds.push({ code, shares, cost, name: '加载中...' });
             saveFunds();
-
+            
+            // 清空输入
             document.getElementById('fundCode').value = '';
             document.getElementById('fundShares').value = '';
             document.getElementById('fundCost').value = '';
-
+            
             refreshData();
         }
-
+        
         // 更新持仓
         function updatePosition(code, field, value) {
             const fund = funds.find(f => f.code === code);
@@ -822,12 +803,12 @@ async function fetchFundData() {
                 refreshData();
             }
         }
-
+        
         // 打开编辑弹窗
         function openEdit(code) {
             const fund = funds.find(f => f.code === code);
             if (!fund) return;
-
+            
             editingCode = code;
             document.getElementById('editCode').value = fund.code;
             document.getElementById('editName').value = fund.name || '';
@@ -835,17 +816,17 @@ async function fetchFundData() {
             document.getElementById('editCost').value = fund.cost || '';
             document.getElementById('editModal').classList.add('show');
         }
-
+        
         // 关闭弹窗
         function closeModal() {
             document.getElementById('editModal').classList.remove('show');
             editingCode = null;
         }
-
+        
         // 保存编辑
         function saveEdit() {
             if (!editingCode) return;
-
+            
             const fund = funds.find(f => f.code === editingCode);
             if (fund) {
                 fund.shares = parseFloat(document.getElementById('editShares').value) || 0;
@@ -855,7 +836,7 @@ async function fetchFundData() {
             }
             closeModal();
         }
-
+        
         // 删除基金
         function deleteFund(code) {
             if (!confirm('确定删除该基金？')) return;
@@ -864,7 +845,7 @@ async function fetchFundData() {
             renderFunds();
             refreshData();
         }
-
+        
         // 清空所有
         function clearAllFunds() {
             if (!confirm('确定清空所有基金？此操作不可恢复！')) return;
@@ -873,15 +854,17 @@ async function fetchFundData() {
             renderFunds();
             updateSummary();
         }
-
-        // 更新汇总
+        
+        // 更新汇总（空状态）
         function updateSummary() {
             document.getElementById('totalCount').textContent = '0';
             document.getElementById('totalMarketValue').textContent = '--';
             document.getElementById('totalDayProfit').textContent = '--';
+            document.getElementById('totalDayProfit').className = 'summary-value';
             document.getElementById('totalProfit').textContent = '--';
+            document.getElementById('totalProfit').className = 'summary-value';
         }
-
+        
         // 排序
         function sortFunds(field) {
             if (currentSort.field === field) {
@@ -892,39 +875,42 @@ async function fetchFundData() {
             }
             renderFunds();
         }
-
+        
         // 保存到本地
         function saveFunds() {
             localStorage.setItem('myFunds', JSON.stringify(funds));
         }
-
+        
         // 刷新数据
         function refreshData() {
             fetchMarketData();
             fetchFundData();
         }
-
+        
         // 自动刷新控制
         function toggleAutoRefresh() {
             autoRefresh = !autoRefresh;
             document.getElementById('autoRefreshSwitch').classList.toggle('active');
-            autoRefresh ? startAutoRefresh() : stopAutoRefresh();
+            if (autoRefresh) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
         }
-
-        // 延长自动刷新间隔
+        
         function startAutoRefresh() {
             stopAutoRefresh();
             if (autoRefresh) {
-                fundRefreshInterval = setInterval(fetchFundData, 300000);   // 基金5分钟刷新
-                marketRefreshInterval = setInterval(fetchMarketData, 60000); // 指数1分钟刷新
+                fundRefreshInterval = setInterval(fetchFundData, 60000); // 基金60秒
+                marketRefreshInterval = setInterval(fetchMarketData, 15000); // 指数15秒
             }
         }
-
+        
         function stopAutoRefresh() {
             clearInterval(fundRefreshInterval);
             clearInterval(marketRefreshInterval);
         }
-
+        
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', init);
     </script>
