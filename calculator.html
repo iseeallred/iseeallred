@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金补仓计算器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        /* 顶部标题栏 */
+        .header {
+            background: #1890ff;
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header h1 { font-size: 18px; font-weight: 500; }
+        .back-link {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .back-link:hover { text-decoration: underline; }
+
+        /* 主容器 */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        /* 输入卡片 */
+        .input-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .form-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-label {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        .form-input {
+            padding: 10px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #1890ff;
+        }
+        .form-input::placeholder {
+            color: #bfbfbf;
+        }
+
+        /* 操作类型选择 */
+        .operation-type {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .type-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #d9d9d9;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .type-btn.active {
+            border-color: #1890ff;
+            background: #e6f7ff;
+            color: #1890ff;
+        }
+        .type-btn:hover:not(.active) {
+            border-color: #40a9ff;
+        }
+
+        /* 计算按钮 */
+        .calc-btn {
+            width: 100%;
+            padding: 14px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+        .calc-btn:hover { background: #40a9ff; }
+
+        /* 结果卡片 */
+        .result-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .result-card.show { display: block; }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .result-item {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+        }
+        .result-item.negative {
+            background: #fff1f0;
+            border-color: #ffa39e;
+        }
+        .result-item.highlight {
+            background: #e6f7ff;
+            border-color: #91d5ff;
+        }
+        .result-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .result-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #52c41a;
+            font-family: 'Courier New', monospace;
+        }
+        .result-item.negative .result-value { color: #ff4d4f; }
+        .result-item.highlight .result-value { color: #1890ff; }
+
+        /* 对比表格 */
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .compare-table th {
+            background: #fafafa;
+            padding: 12px;
+            text-align: center;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .compare-table td {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .compare-table .number {
+            font-family: 'Courier New', monospace;
+            font-variant-numeric: tabular-nums;
+        }
+        .compare-table .up { color: #ff4d4f; }
+        .compare-table .down { color: #52c41a; }
+
+        /* 提示信息 */
+        .tips {
+            background: #fffbe6;
+            border: 1px solid #ffe58f;
+            border-radius: 6px;
+            padding: 12px 15px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #666;
+        }
+        .tips-title {
+            font-weight: 500;
+            color: #faad14;
+            margin-bottom: 5px;
+        }
+
+        /* 历史记录 */
+        .history-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .history-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-info { flex: 1; }
+        .history-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        .history-type.buy {
+            background: #e6f7ff;
+            color: #1890ff;
+        }
+        .history-type.sell {
+            background: #fff1f0;
+            color: #ff4d4f;
+        }
+        .history-result {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        .history-cost {
+            font-size: 12px;
+            color: #666;
+        }
+        .btn-small {
+            padding: 4px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .btn-clear {
+            background: #ff4d4f;
+            color: white;
+        }
+        .btn-clear:hover { background: #ff7875; }
+
+        /* 手机适配 */
+        @media (max-width: 768px) {
+            .form-grid { grid-template-columns: 1fr; }
+            .result-grid { grid-template-columns: repeat(2, 1fr); }
+            .operation-type { flex-direction: column; }
+            .header h1 { font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="index.html" class="back-link">← 返回监控</a>
+        <h1>📱 基金补仓计算器</h1>
+        <span></span>
+    </div>
+
+    <div class="container">
+        <!-- 操作类型选择 -->
+        <div class="input-card">
+            <div class="card-title">选择操作类型</div>
+            <div class="operation-type">
+                <div class="type-btn active" onclick="setOperation('buy')" id="btnBuy">
+                    <div style="font-size: 18px; margin-bottom: 4px;">📈</div>
+                    <div>补仓买入</div>
+                </div>
+                <div class="type-btn" onclick="setOperation('sell')" id="btnSell">
+                    <div style="font-size: 18px; margin-bottom: 4px;">📉</div>
+                    <div>减仓卖出</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="input-card">
+            <div class="card-title">当前持仓情况</div>
+            <div class="form-grid">
+                <div class="form-item">
+                    <label class="form-label">当前持仓份额</label>
+                    <input type="number" class="form-input" id="currentShares" placeholder="例如：10000" step="0.01">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">当前持仓成本</label>
+                    <input type="number" class="form-input" id="currentCost" placeholder="例如：1.2345" step="0.0001">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">当前基金净值</label>
+                    <input type="number" class="form-input" id="currentNav" placeholder="例如：1.1000" step="0.0001">
+                </div>
+            </div>
+        </div>
+
+        <div class="input-card">
+            <div class="card-title" id="operationTitle">补仓计划</div>
+            <div class="form-grid">
+                <div class="form-item">
+                    <label class="form-label" id="amountLabel">补仓金额（元）</label>
+                    <input type="number" class="form-input" id="operationAmount" placeholder="例如：10000" step="0.01">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">操作时的净值</label>
+                    <input type="number" class="form-input" id="operationNav" placeholder="例如：1.0500" step="0.0001">
+                </div>
+            </div>
+            <button class="calc-btn" onclick="calculate()">🧮 开始计算</button>
+        </div>
+
+        <!-- 计算结果 -->
+        <div class="result-card" id="resultCard">
+            <div class="card-title">计算结果</div>
+            <div class="result-grid" id="resultGrid">
+                <!-- 动态生成 -->
+            </div>
+
+            <table class="compare-table">
+                <thead>
+                    <tr>
+                        <th>项目</th>
+                        <th>操作前</th>
+                        <th>操作后</th>
+                        <th>变化</th>
+                    </tr>
+                </thead>
+                <tbody id="compareBody">
+                    <!-- 动态生成 -->
+                </tbody>
+            </table>
+
+            <div class="tips" id="tipsBox">
+                <div class="tips-title">💡 操作建议</div>
+                <div id="tipsContent"></div>
+            </div>
+
+            <button class="calc-btn" onclick="saveToHistory()" style="margin-top: 15px;">
+                💾 保存到历史记录
+            </button>
+        </div>
+
+        <!-- 历史记录 -->
+        <div class="history-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div class="card-title" style="margin: 0;">📋 历史记录</div>
+                <button class="btn-small btn-clear" onclick="clearHistory()">清空</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <div style="text-align: center; color: #999; padding: 20px;">暂无记录</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentOperation = 'buy';
+        let lastCalcResult = null;
+
+        // 初始化
+        function init() {
+            loadHistory();
+            // 从主页面传递的数据（如果有）
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('shares')) {
+                document.getElementById('currentShares').value = urlParams.get('shares');
+            }
+            if (urlParams.has('cost')) {
+                document.getElementById('currentCost').value = urlParams.get('cost');
+            }
+            if (urlParams.has('nav')) {
+                document.getElementById('currentNav').value = urlParams.get('nav');
+            }
+        }
+
+        // 设置操作类型
+        function setOperation(type) {
+            currentOperation = type;
+            document.getElementById('btnBuy').classList.toggle('active', type === 'buy');
+            document.getElementById('btnSell').classList.toggle('active', type === 'sell');
+
+            const title = type === 'buy' ? '补仓计划' : '减仓计划';
+            const label = type === 'buy' ? '补仓金额（元）' : '减仓金额（元）';
+
+            document.getElementById('operationTitle').textContent = title;
+            document.getElementById('amountLabel').textContent = label;
+        }
+
+        // 计算
+        function calculate() {
+            const shares = parseFloat(document.getElementById('currentShares').value) || 0;
+            const cost = parseFloat(document.getElementById('currentCost').value) || 0;
+            const nav = parseFloat(document.getElementById('currentNav').value) || 0;
+            const amount = parseFloat(document.getElementById('operationAmount').value) || 0;
+            const opNav = parseFloat(document.getElementById('operationNav').value) || 0;
+
+            if (!shares || !cost || !nav || !amount || !opNav) {
+                alert('请填写完整信息');
+                return;
+            }
+
+            const currentValue = shares * nav;
+            const currentProfit = (nav - cost) * shares;
+            const currentProfitRate = ((nav - cost) / cost) * 100;
+
+            let newShares, newCost, newValue, newProfit, newProfitRate;
+
+            if (currentOperation === 'buy') {
+                // 补仓
+                const buyShares = amount / opNav;
+                newShares = shares + buyShares;
+                newCost = (shares * cost + amount) / newShares;
+                newValue = newShares * nav;
+                newProfit = (nav - newCost) * newShares;
+            } else {
+                // 减仓
+                const sellShares = amount / opNav;
+                if (sellShares > shares) {
+                    alert('减仓份额不能超过当前持仓');
+                    return;
+                }
+                newShares = shares - sellShares;
+                newCost = cost; // 成本不变
+                newValue = newShares * nav;
+                newProfit = (nav - newCost) * newShares;
+            }
+
+            newProfitRate = ((nav - newCost) / newCost) * 100;
+
+            lastCalcResult = {
+                type: currentOperation,
+                shares, cost, nav, amount, opNav,
+                currentValue, currentProfit, currentProfitRate,
+                newShares, newCost, newValue, newProfit, newProfitRate
+            };
+
+            showResult(lastCalcResult);
+        }
+
+        // 显示结果
+        function showResult(r) {
+            const resultCard = document.getElementById('resultCard');
+            resultCard.classList.add('show');
+
+            // 结果卡片
+            const isBuy = r.type === 'buy';
+            const profitClass = r.newProfit >= 0 ? '' : 'negative';
+
+            document.getElementById('resultGrid').innerHTML = `
+                <div class="result-item highlight">
+                    <div class="result-label">新持仓份额</div>
+                    <div class="result-value">${r.newShares.toFixed(2)}</div>
+                </div>
+                <div class="result-item highlight">
+                    <div class="result-label">新持仓成本</div>
+                    <div class="result-value">${r.newCost.toFixed(4)}</div>
+                </div>
+                <div class="result-item ${profitClass}">
+                    <div class="result-label">新累计收益</div>
+                    <div class="result-value">${r.newProfit >= 0 ? '+' : ''}${r.newProfit.toFixed(2)}</div>
+                </div>
+                <div class="result-item ${r.newProfitRate >= 0 ? '' : 'negative'}">
+                    <div class="result-label">新收益率</div>
+                    <div class="result-value">${r.newProfitRate >= 0 ? '+' : ''}${r.newProfitRate.toFixed(2)}%</div>
+                </div>
+            `;
+
+            // 对比表格
+            const costChange = ((r.newCost - r.cost) / r.cost * 100).toFixed(2);
+            const costChangeHtml = isBuy 
+                ? `<span class="${r.newCost < r.cost ? 'down' : 'up'}">${r.newCost < r.cost ? '↓' : '↑'} ${Math.abs(costChange)}%</span>`
+                : '<span style="color: #999;">-</span>';
+
+            document.getElementById('compareBody').innerHTML = `
+                <tr>
+                    <td>持仓份额</td>
+                    <td class="number">${r.shares.toFixed(2)}</td>
+                    <td class="number">${r.newShares.toFixed(2)}</td>
+                    <td class="number ${r.newShares > r.shares ? 'up' : 'down'}">${r.newShares > r.shares ? '+' : ''}${(r.newShares - r.shares).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td>持仓成本</td>
+                    <td class="number">${r.cost.toFixed(4)}</td>
+                    <td class="number">${r.newCost.toFixed(4)}</td>
+                    <td class="number">${costChangeHtml}</td>
+                </tr>
+                <tr>
+                    <td>累计收益</td>
+                    <td class="number ${r.currentProfit >= 0 ? 'up' : 'down'}">${r.currentProfit >= 0 ? '+' : ''}${r.currentProfit.toFixed(2)}</td>
+                    <td class="number ${r.newProfit >= 0 ? 'up' : 'down'}">${r.newProfit >= 0 ? '+' : ''}${r.newProfit.toFixed(2)}</td>
+                    <td class="number ${r.newProfit >= r.currentProfit ? 'up' : 'down'}">${r.newProfit >= r.currentProfit ? '+' : ''}${(r.newProfit - r.currentProfit).toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td>收益率</td>
+                    <td class="number ${r.currentProfitRate >= 0 ? 'up' : 'down'}">${r.currentProfitRate >= 0 ? '+' : ''}${r.currentProfitRate.toFixed(2)}%</td>
+                    <td class="number ${r.newProfitRate >= 0 ? 'up' : 'down'}">${r.newProfitRate >= 0 ? '+' : ''}${r.newProfitRate.toFixed(2)}%</td>
+                    <td class="number ${r.newProfitRate >= r.currentProfitRate ? 'up' : 'down'}">${r.newProfitRate >= r.currentProfitRate ? '+' : ''}${(r.newProfitRate - r.currentProfitRate).toFixed(2)}%</td>
+                </tr>
+            `;
+
+            // 建议
+            let tips = '';
+            if (isBuy) {
+                if (r.newCost < r.cost) {
+                    tips = `✅ 补仓后成本从 ${r.cost.toFixed(4)} 降低至 ${r.newCost.toFixed(4)}，降低了 ${((r.cost - r.newCost) / r.cost * 100).toFixed(2)}%。<br>💡 建议：当前净值低于成本价 ${((r.cost - r.nav) / r.cost * 100).toFixed(2)}%，适合补仓降低成本。`;
+                } else {
+                    tips = `⚠️ 补仓后成本上升至 ${r.newCost.toFixed(4)}。<br>💡 建议：当前操作价 ${r.opNav.toFixed(4)} 高于原成本 ${r.cost.toFixed(4)}，请确认是否要追高。`;
+                }
+            } else {
+                if (r.nav > r.cost) {
+                    tips = `✅ 当前处于盈利状态，减仓可锁定部分收益。<br>💡 建议：盈利 ${((r.nav - r.cost) / r.cost * 100).toFixed(2)}%，可考虑分批减仓。`;
+                } else {
+                    tips = `⚠️ 当前处于亏损状态，减仓会实现亏损。<br>💡 建议：亏损 ${((r.cost - r.nav) / r.cost * 100).toFixed(2)}%，若非急需资金，建议继续持有或补仓降低成本。`;
+                }
+            }
+            document.getElementById('tipsContent').innerHTML = tips;
+        }
+
+        // 保存到历史
+        function saveToHistory() {
+            if (!lastCalcResult) return;
+
+            const history = JSON.parse(localStorage.getItem('calcHistory') || '[]');
+            const record = {
+                ...lastCalcResult,
+                time: new Date().toLocaleString('zh-CN')
+            };
+            history.unshift(record);
+            if (history.length > 20) history.pop(); // 保留最近20条
+
+            localStorage.setItem('calcHistory', JSON.stringify(history));
+            loadHistory();
+
+            alert('已保存到历史记录');
+        }
+
+        // 加载历史
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('calcHistory') || '[]');
+            const list = document.getElementById('historyList');
+
+            if (history.length === 0) {
+                list.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无记录</div>';
+                return;
+            }
+
+            list.innerHTML = history.map((h, i) => {
+                const isBuy = h.type === 'buy';
+                return `
+                    <div class="history-item">
+                        <div class="history-info">
+                            <span class="history-type ${isBuy ? 'buy' : 'sell'}">${isBuy ? '补仓' : '减仓'}</span>
+                            <span>${h.time}</span>
+                            <div style="margin-top: 4px; font-size: 12px; color: #666;">
+                                份额: ${h.shares.toFixed(0)} → ${h.newShares.toFixed(0)} | 
+                                成本: ${h.cost.toFixed(4)} → ${h.newCost.toFixed(4)}
+                            </div>
+                        </div>
+                        <div class="history-result">
+                            <div style="font-weight: bold; color: ${h.newProfit >= 0 ? '#ff4d4f' : '#52c41a'};">
+                                ${h.newProfit >= 0 ? '+' : ''}${h.newProfit.toFixed(2)}
+                            </div>
+                            <div class="history-cost">${h.newProfitRate.toFixed(2)}%</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 清空历史
+        function clearHistory() {
+            if (!confirm('确定清空所有历史记录？')) return;
+            localStorage.removeItem('calcHistory');
+            loadHistory();
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
