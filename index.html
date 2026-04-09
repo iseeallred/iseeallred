@@ -414,9 +414,9 @@
         </div>
         <div class="auto-refresh-row">
             <div class="switch active" id="autoRefreshSwitch" onclick="toggleAutoRefresh()"></div>
-            <span>自动刷新（基金60秒 / 指数15秒）</span>
+            <span>自动刷新（基金5分钟 / 指数1分钟）</span>
             <div style="margin-left: auto;">
-                <button class="btn btn-default" onclick="refreshData()">🔄 刷新</button>
+                <button class="btn btn-default" id="refreshBtn">🔄 刷新</button>
                 <button class="btn btn-danger" onclick="clearAllFunds()">清空</button>
             </div>
         </div>
@@ -513,6 +513,24 @@
         let currentSort = { field: null, asc: true };
         let editingCode = null;
 
+        // ==================== 方案1优化：1.1 新增缓存配置（5分钟） ====================
+        const cache = {
+            fundData: {},
+            marketData: { data: null, expireTime: 0 },
+            cacheTime: 5 * 60 * 1000 // 缓存5分钟
+        };
+
+        // ==================== 方案1优化：1.2 新增节流函数（防重复点击） ====================
+        function throttle(fn, delay = 10000) {
+            let timer = null;
+            return function(...args) {
+                if (!timer) {
+                    fn.apply(this, args);
+                    timer = setTimeout(() => timer = null, delay);
+                }
+            };
+        }
+
         // 大盘指数代码
         const marketIndices = [
             { code: '1.000001', name: '上证指数' },
@@ -528,6 +546,10 @@
                 const script = document.createElement('script');
                 const callbackId = 'jsonp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 
+                // ==================== 方案1优化：1.3 模拟请求头，规避反爬 ====================
+                script.referrerPolicy = 'origin';
+                script.setAttribute('referer', 'https://fund.eastmoney.com/');
+
                 window[callbackId] = function(data) {
                     delete window[callbackId];
                     document.head.removeChild(script);
@@ -540,7 +562,6 @@
                     reject(new Error('JSONP请求失败'));
                 };
 
-                // 设置超时
                 setTimeout(() => {
                     if (window[callbackId]) {
                         delete window[callbackId];
@@ -563,6 +584,9 @@
             renderFunds();
             refreshData();
             startAutoRefresh();
+            
+            // 绑定节流后的刷新按钮
+            document.getElementById('refreshBtn').onclick = throttle(refreshData);
         }
 
         // 更新时间
@@ -594,24 +618,39 @@
             }
         }
 
-        // 获取大盘指数（使用JSONP）
+        // 获取大盘指数（带缓存+请求头）
         async function fetchMarketData() {
             try {
-                const codes = marketIndices.map(i => i.code).join(',');
                 const timestamp = Date.now();
-                const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f4,f12,f14&secids=${codes}&_=${timestamp}`;
+                // 缓存优先
+                if (timestamp < cache.marketData.expireTime && cache.marketData.data) {
+                    renderMarketData(cache.marketData.data);
+                    return;
+                }
 
-                // 使用fetch尝试，如果失败则使用备用方案
-                const response = await fetch(url);
+                const codes = marketIndices.map(i => i.code).join(',');
+                const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f4,f12,f14&secids=${codes}&_=${timestamp}`;
+                
+                // 方案1优化：添加请求头
+                const response = await fetch(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://quote.eastmoney.com/'
+                    }
+                });
                 const data = await response.json();
 
                 if (data && data.data && data.data.diff) {
+                    cache.marketData = {
+                        data: data.data.diff,
+                        expireTime: timestamp + cache.cacheTime
+                    };
                     renderMarketData(data.data.diff);
                     document.getElementById('errorTip').style.display = 'none';
                 }
             } catch (e) {
                 console.error('获取大盘数据失败:', e);
-                // 大盘数据失败不影响基金数据
+                if (cache.marketData.data) renderMarketData(cache.marketData.data);
             }
         }
 
@@ -635,7 +674,7 @@
             }).join('');
         }
 
-        // 获取基金数据（使用JSONP方式）
+        // 获取基金数据（带缓存）
         async function fetchFundData() {
             if (funds.length === 0) return;
 
@@ -643,13 +682,20 @@
             document.getElementById('updateStatus').style.background = '#faad14';
 
             try {
-                // 使用天天基金JSONP接口（支持跨域）
                 const timestamp = Date.now();
                 const promises = funds.map(fund => {
+                    // 缓存优先
+                    const cached = cache.fundData[fund.code];
+                    if (cached && timestamp < cached.expireTime) {
+                        return Promise.resolve({ code: fund.code, data: cached.data });
+                    }
                     const url = `https://fundgz.1234567.com.cn/js/${fund.code}.js?rt=${timestamp}`;
                     return jsonpRequest(url, 'callback')
-                        .then(data => ({ code: fund.code, data }))
-                        .catch(() => ({ code: fund.code, data: null }));
+                        .then(data => {
+                            cache.fundData[fund.code] = { data, expireTime: timestamp + cache.cacheTime };
+                            return { code: fund.code, data };
+                        })
+                        .catch(() => ({ code: fund.code, data: cached?.data || null }));
                 });
 
                 const results = await Promise.all(promises);
@@ -664,8 +710,6 @@
                         document.getElementById('updateStatus').textContent = '更新中...';
                         document.getElementById('updateStatus').style.background = '#faad14';
                     }, 2000);
-                } else {
-                    throw new Error('无有效数据');
                 }
             } catch (e) {
                 console.error('获取基金数据失败:', e);
@@ -716,7 +760,6 @@
                 return fund;
             });
 
-            // 更新汇总
             document.getElementById('totalCount').textContent = funds.length;
             document.getElementById('totalMarketValue').textContent = formatMoney(totalMarketValue);
             document.getElementById('totalDayProfit').textContent = formatMoney(totalDayProfit, true);
@@ -737,7 +780,6 @@
                 return;
             }
 
-            // 排序
             let displayFunds = [...funds];
             if (currentSort.field) {
                 displayFunds.sort((a, b) => {
@@ -749,8 +791,6 @@
 
             tbody.innerHTML = displayFunds.map(fund => {
                 const isUp = (fund.gszzl || 0) >= 0;
-                const hasPosition = fund.shares && fund.cost;
-
                 return `
                     <tr>
                         <td class="fund-code">${fund.code}</td>
@@ -804,7 +844,6 @@
             funds.push({ code, shares, cost, name: '加载中...' });
             saveFunds();
 
-            // 清空输入
             document.getElementById('fundCode').value = '';
             document.getElementById('fundShares').value = '';
             document.getElementById('fundCost').value = '';
@@ -873,14 +912,12 @@
             updateSummary();
         }
 
-        // 更新汇总（空状态）
+        // 更新汇总
         function updateSummary() {
             document.getElementById('totalCount').textContent = '0';
             document.getElementById('totalMarketValue').textContent = '--';
             document.getElementById('totalDayProfit').textContent = '--';
-            document.getElementById('totalDayProfit').className = 'summary-value';
             document.getElementById('totalProfit').textContent = '--';
-            document.getElementById('totalProfit').className = 'summary-value';
         }
 
         // 排序
@@ -909,18 +946,15 @@
         function toggleAutoRefresh() {
             autoRefresh = !autoRefresh;
             document.getElementById('autoRefreshSwitch').classList.toggle('active');
-            if (autoRefresh) {
-                startAutoRefresh();
-            } else {
-                stopAutoRefresh();
-            }
+            autoRefresh ? startAutoRefresh() : stopAutoRefresh();
         }
 
+        // ==================== 方案1优化：1.2 延长自动刷新间隔 ====================
         function startAutoRefresh() {
             stopAutoRefresh();
             if (autoRefresh) {
-                fundRefreshInterval = setInterval(fetchFundData, 60000); // 基金60秒
-                marketRefreshInterval = setInterval(fetchMarketData, 15000); // 指数15秒
+                fundRefreshInterval = setInterval(fetchFundData, 300000);   // 基金5分钟刷新
+                marketRefreshInterval = setInterval(fetchMarketData, 60000); // 指数1分钟刷新
             }
         }
 
