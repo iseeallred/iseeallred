@@ -3,8 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 关键修复：添加CSP白名单，允许天天基金和东方财富加载脚本 -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fundgz.1234567.com.cn https://push2.eastmoney.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://push2.eastmoney.com;">
     <title>基金实时监控</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -391,7 +389,7 @@
 
     <!-- 错误提示 -->
     <div class="error-tip" id="errorTip" style="display: none;">
-        ⚠️ 数据获取失败，请检查网络连接或稍后重试。如果持续失败，可能是API限制，建议稍后访问。
+        ⚠️ 数据获取失败，请检查网络连接或稍后重试。
     </div>
 
     <!-- 大盘指数 -->
@@ -509,7 +507,6 @@
     <script>
         // 数据存储
         let funds = JSON.parse(localStorage.getItem('myFunds') || '[]');
-        let marketData = {};
         let autoRefresh = true;
         let fundRefreshInterval, marketRefreshInterval;
         let currentSort = { field: null, asc: true };
@@ -541,43 +538,6 @@
             { code: '1.000688', name: '科创50' },
             { code: '0.899050', name: '北证50' }
         ];
-
-        // JSONP请求封装（强制HTTPS+模拟请求头）
-        function jsonpRequest(url, callbackName) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                const callbackId = 'jsonp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-                // 强制HTTPS
-                url = url.replace('http://', 'https://');
-                script.referrerPolicy = 'origin';
-                script.setAttribute('referer', 'https://fund.eastmoney.com/');
-
-                window[callbackId] = function(data) {
-                    delete window[callbackId];
-                    document.head.removeChild(script);
-                    resolve(data);
-                };
-
-                script.onerror = function() {
-                    delete window[callbackId];
-                    document.head.removeChild(script);
-                    reject(new Error('JSONP请求被浏览器拦截'));
-                };
-
-                setTimeout(() => {
-                    if (window[callbackId]) {
-                        delete window[callbackId];
-                        if (script.parentNode) document.head.removeChild(script);
-                        reject(new Error('请求超时'));
-                    }
-                }, 15000);
-
-                const separator = url.indexOf('?') >= 0 ? '&' : '?';
-                script.src = url + separator + callbackName + '=' + callbackId;
-                document.head.appendChild(script);
-            });
-        }
 
         // 初始化
         function init() {
@@ -620,7 +580,7 @@
             }
         }
 
-        // 获取大盘指数（强制HTTPS+请求头）
+        // 获取大盘指数（通过公共代理）
         async function fetchMarketData() {
             try {
                 const timestamp = Date.now();
@@ -630,15 +590,10 @@
                 }
 
                 const codes = marketIndices.map(i => i.code).join(',');
-                // 强制HTTPS
-                const url = `https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f4,f12,f14&secids=${codes}&_=${timestamp}`;
+                // 使用公共代理接口
+                const url = `https://api.allorigins.win/raw?url=https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f4,f12,f14&secids=${codes}&_=${timestamp}`;
                 
-                const response = await fetch(url, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-                        'Referer': 'https://quote.eastmoney.com/'
-                    }
-                });
+                const response = await fetch(url);
                 const data = await response.json();
 
                 if (data && data.data && data.data.diff) {
@@ -675,7 +630,7 @@
             }).join('');
         }
 
-        // 获取基金数据（强制HTTPS+缓存）
+        // 获取基金数据（通过公共代理）
         async function fetchFundData() {
             if (funds.length === 0) return;
 
@@ -689,10 +644,14 @@
                     if (cached && timestamp < cached.expireTime) {
                         return Promise.resolve({ code: fund.code, data: cached.data });
                     }
-                    // 强制HTTPS
-                    const url = `https://fundgz.1234567.com.cn/js/${fund.code}.js?rt=${timestamp}`;
-                    return jsonpRequest(url, 'callback')
-                        .then(data => {
+                    // 使用公共代理接口
+                    const url = `https://api.allorigins.win/raw?url=https://fundgz.1234567.com.cn/js/${fund.code}.js?rt=${timestamp}`;
+                    return fetch(url)
+                        .then(res => res.text())
+                        .then(text => {
+                            // 解析JSONP数据
+                            const dataStr = text.replace(/^jsonpgz\(/, '').replace(/\);$/, '');
+                            const data = JSON.parse(dataStr);
                             cache.fundData[fund.code] = { data, expireTime: timestamp + cache.cacheTime };
                             return { code: fund.code, data };
                         })
