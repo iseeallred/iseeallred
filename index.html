@@ -630,54 +630,56 @@
             }).join('');
         }
 
-        // 获取基金数据（通过公共代理）
-        async function fetchFundData() {
-            if (funds.length === 0) return;
-
-            document.getElementById('updateStatus').textContent = '更新中...';
-            document.getElementById('updateStatus').style.background = '#faad14';
-
-            try {
-                const timestamp = Date.now();
-                const promises = funds.map(fund => {
-                    const cached = cache.fundData[fund.code];
-                    if (cached && timestamp < cached.expireTime) {
-                        return Promise.resolve({ code: fund.code, data: cached.data });
+     // 获取基金数据（使用公共代理）
+async function fetchFundData() {
+    if (funds.length === 0) return;
+    
+    document.getElementById('updateStatus').textContent = '更新中...';
+    document.getElementById('updateStatus').style.background = '#faad14';
+    
+    try {
+        const timestamp = Date.now();
+        const promises = funds.map(fund => {
+            // 使用公共代理
+            const fundUrl = `https://fundgz.1234567.com.cn/js/${fund.code}.js?rt=${timestamp}`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fundUrl)}`;
+            
+            return fetch(proxyUrl)
+                .then(r => r.text())
+                .then(text => {
+                    // 解析 JSONP 格式：jsonpgz({...})
+                    const match = text.match(/jsonpgz\((.*)\);/);
+                    if (match) {
+                        return { code: fund.code, data: JSON.parse(match[1]) };
                     }
-                    // 使用公共代理接口
-                    const url = `https://api.allorigins.win/raw?url=https://fundgz.1234567.com.cn/js/${fund.code}.js?rt=${timestamp}`;
-                    return fetch(url)
-                        .then(res => res.text())
-                        .then(text => {
-                            // 解析JSONP数据
-                            const dataStr = text.replace(/^jsonpgz\(/, '').replace(/\);$/, '');
-                            const data = JSON.parse(dataStr);
-                            cache.fundData[fund.code] = { data, expireTime: timestamp + cache.cacheTime };
-                            return { code: fund.code, data };
-                        })
-                        .catch(() => ({ code: fund.code, data: cached?.data || null }));
-                });
-
-                const results = await Promise.all(promises);
-                const validResults = results.filter(r => r.data && r.data.fundcode);
-
-                if (validResults.length > 0) {
-                    updateFundData(validResults);
-                    document.getElementById('updateStatus').textContent = '已更新';
-                    document.getElementById('updateStatus').style.background = '#52c41a';
-                    document.getElementById('errorTip').style.display = 'none';
-                    setTimeout(() => {
-                        document.getElementById('updateStatus').textContent = '更新中...';
-                        document.getElementById('updateStatus').style.background = '#faad14';
-                    }, 2000);
-                }
-            } catch (e) {
-                console.error('获取基金数据失败:', e);
-                document.getElementById('updateStatus').textContent = '更新失败';
-                document.getElementById('updateStatus').style.background = '#ff4d4f';
-                document.getElementById('errorTip').style.display = 'block';
-            }
+                    throw new Error('Invalid response');
+                })
+                .catch(() => ({ code: fund.code, data: null }));
+        });
+        
+        const results = await Promise.all(promises);
+        const validResults = results.filter(r => r.data && r.data.fundcode);
+        
+        if (validResults.length > 0) {
+            updateFundData(validResults);
+            document.getElementById('updateStatus').textContent = '已更新';
+            document.getElementById('updateStatus').style.background = '#52c41a';
+            document.getElementById('errorTip').style.display = 'none';
+            setTimeout(() => {
+                document.getElementById('updateStatus').textContent = '更新中...';
+                document.getElementById('updateStatus').style.background = '#faad14';
+            }, 2000);
+        } else {
+            throw new Error('无有效数据');
         }
+    } catch (e) {
+        console.error('获取基金数据失败:', e);
+        document.getElementById('updateStatus').textContent = '更新失败';
+        document.getElementById('updateStatus').style.background = '#ff4d4f';
+        document.getElementById('errorTip').style.display = 'block';
+        document.getElementById('errorTip').innerHTML = '⚠️ 公共代理可能已限流，建议稍后重试或使用其他部署方案。';
+    }
+}
 
         // 更新基金数据
         function updateFundData(results) {
